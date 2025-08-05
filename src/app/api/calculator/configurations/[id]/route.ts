@@ -4,11 +4,12 @@ import prisma from '@/lib/prisma'
 // GET /api/calculator/configurations/[id]
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const configuration = await prisma.productConfiguration.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         product: true,
         materials: {
@@ -49,27 +50,28 @@ export async function GET(
 // PUT /api/calculator/configurations/[id]
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const data = await req.json()
 
     // Удаляем существующие связи
     await prisma.$transaction([
       prisma.configurationMaterial.deleteMany({
-        where: { configurationId: params.id }
+        where: { configurationId: id }
       }),
       prisma.configurationWorkType.deleteMany({
-        where: { configurationId: params.id }
+        where: { configurationId: id }
       }),
       prisma.configurationFund.deleteMany({
-        where: { configurationId: params.id }
+        where: { configurationId: id }
       })
     ])
 
     // Обновляем конфигурацию
     const configuration = await prisma.productConfiguration.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         name: data.name,
         totalPrice: data.totalPrice,
@@ -127,11 +129,12 @@ export async function PUT(
 // DELETE /api/calculator/configurations/[id]
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     await prisma.productConfiguration.delete({
-      where: { id: params.id }
+      where: { id }
     })
 
     return NextResponse.json({ success: true })

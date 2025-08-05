@@ -5,12 +5,13 @@ const prisma = new PrismaClient()
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const formula = await prisma.savedFormula.findUnique({
       where: { 
-        id: params.id,
+        id,
         isActive: true 
       }
     })
@@ -43,13 +44,14 @@ export async function GET(
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const data = await request.json()
     
     const formula = await prisma.savedFormula.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         name: data.name,
         description: data.description,
@@ -79,12 +81,13 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     // Мягкое удаление - просто помечаем как неактивную
     await prisma.savedFormula.update({
-      where: { id: params.id },
+      where: { id },
       data: { 
         isActive: false,
         updatedAt: new Date()

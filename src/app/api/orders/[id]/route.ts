@@ -6,10 +6,10 @@ const prisma = new PrismaClient()
 // GET /api/orders/[id] - получить заказ по ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params
+    const { id } = await params;
 
     const order = await prisma.order.findUnique({
       where: { id, isActive: true },
@@ -44,10 +44,10 @@ export async function GET(
 // PUT /api/orders/[id] - обновить заказ
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params
+    const { id } = await params;
     const data = await request.json()
 
     // Проверяем существование заказа
@@ -130,10 +130,10 @@ export async function PUT(
 // DELETE /api/orders/[id] - мягкое удаление заказа
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params
+    const { id } = await params;
 
     const order = await prisma.order.findUnique({
       where: { id, isActive: true }

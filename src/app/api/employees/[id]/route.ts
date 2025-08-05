@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 // GET /api/employees/[id] - получить сотрудника по ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = params
@@ -48,7 +48,7 @@ export async function GET(
 // PUT /api/employees/[id] - обновить сотрудника
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = params
@@ -132,7 +132,7 @@ export async function PUT(
 // DELETE /api/employees/[id] - удалить сотрудника (мягкое удаление)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = params

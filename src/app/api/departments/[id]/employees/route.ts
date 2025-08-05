@@ -6,12 +6,13 @@ const prisma = new PrismaClient()
 // GET /api/departments/[id]/employees - получить сотрудников отдела
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const employees = await prisma.employee.findMany({
       where: { 
-        departmentId: params.id,
+        departmentId: id,
         isActive: true 
       },
       orderBy: [

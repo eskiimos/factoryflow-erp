@@ -132,11 +132,12 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 }
 
 // DELETE /api/product-groups/subgroups/[id]
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     // Проверим, существует ли подгруппа
     const subgroup = await prisma.productSubgroup.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
 
     if (!subgroup) {

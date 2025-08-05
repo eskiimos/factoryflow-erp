@@ -6,11 +6,12 @@ const prisma = new PrismaClient()
 // GET /api/departments/[id] - получить отдел по ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const department = await prisma.department.findUnique({
-      where: { id: params.id },
+      where: { id: id },
       include: {
         workTypes: true,
         employees: true,
@@ -46,9 +47,10 @@ export async function GET(
 // PUT /api/departments/[id] - обновить отдел
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const body = await request.json()
     const { name, description, isActive } = body
 
@@ -62,7 +64,7 @@ export async function PUT(
 
     // Проверка существования
     const existingDepartment = await prisma.department.findUnique({
-      where: { id: params.id }
+      where: { id: id }
     })
 
     if (!existingDepartment) {
@@ -76,7 +78,7 @@ export async function PUT(
     const duplicateDepartment = await prisma.department.findFirst({
       where: { 
         name,
-        id: { not: params.id }
+        id: { not: id }
       }
     })
 
@@ -88,7 +90,7 @@ export async function PUT(
     }
 
     const department = await prisma.department.update({
-      where: { id: params.id },
+      where: { id: id },
       data: {
         name,
         description,
@@ -113,12 +115,12 @@ export async function PUT(
 // DELETE /api/departments/[id] - удалить отдел (мягкое удаление)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Проверка существования
     const existingDepartment = await prisma.department.findUnique({
-      where: { id: params.id },
+      where: { id: id },
       include: {
         _count: {
           select: {
@@ -146,7 +148,7 @@ export async function DELETE(
 
     // Мягкое удаление
     await prisma.department.update({
-      where: { id: params.id },
+      where: { id: id },
       data: { isActive: false }
     })
 

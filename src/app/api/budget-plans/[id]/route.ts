@@ -4,11 +4,12 @@ import { prisma } from '@/lib/prisma'
 // GET /api/budget-plans/[id] - получить бюджетный план по ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const budgetPlan = await prisma.budgetPlan.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         salesForecasts: {
           include: {
@@ -59,13 +60,14 @@ export async function GET(
 // PUT /api/budget-plans/[id] - обновить бюджетный план
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const data = await request.json()
     
     const budgetPlan = await prisma.budgetPlan.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         name: data.name,
         description: data.description,
@@ -105,11 +107,12 @@ export async function PUT(
 // DELETE /api/budget-plans/[id] - удалить бюджетный план (soft delete)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const budgetPlan = await prisma.budgetPlan.update({
-      where: { id: params.id },
+      where: { id },
       data: { isActive: false }
     })
 

@@ -4,10 +4,10 @@ import { prisma } from '@/lib/prisma'
 // DELETE /api/fund-items/[id] - удалить элемент фонда
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const itemId = params.id
+    const itemId = id
 
     // Получаем элемент перед удалением
     const item = await prisma.fundCategoryItem.findUnique({
@@ -91,10 +91,10 @@ export async function DELETE(
 // PUT /api/fund-items/[id] - обновить элемент фонда
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const itemId = params.id
+    const itemId = id
     const body = await request.json()
     const { name, itemType, amount, description, currency } = body
 
