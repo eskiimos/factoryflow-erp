@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: CategoryPageProps) {
   // Получаем информацию о категории для мета-тегов
   try {
     const { id } = await params;
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/categories/${id}`)
+    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/categories/${id}`)
     const category = await response.json()
     
     return {
