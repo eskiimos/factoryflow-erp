@@ -87,6 +87,7 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || ''
     const categoryId = searchParams.get('categoryId') || ''
     const groupId = searchParams.get('groupId') || ''
+    const subgroupId = searchParams.get('subgroupId') || ''
     const group = searchParams.get('group') || '' // Фильтрация по имени группы
     const showAll = searchParams.get('showAll') === 'true'
     const includeInactive = searchParams.get('includeInactive') === 'true'
@@ -111,6 +112,15 @@ export async function GET(request: NextRequest) {
 
     if (groupId) {
       whereConditions.groupId = groupId
+    }
+
+    // Обрабатываем параметр subgroupId
+    if (subgroupId === 'null') {
+      // Специальная обработка для запроса товаров без подгрупп
+      whereConditions.subgroupId = null
+    } else if (subgroupId) {
+      // Фильтрация по конкретной подгруппе
+      whereConditions.subgroupId = subgroupId
     }
 
     if (group) {

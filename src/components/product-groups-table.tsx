@@ -83,17 +83,25 @@ export function ProductGroupsTable({
   const router = useRouter();
   const { toast } = useToast();
 
-  // Загружаем группы при монтировании компонента
+    // Загружаем группы при монтировании компонента
   useEffect(() => {
     if (!externalGroups) {
       fetchGroups();
     } else {
+      console.log('📦 Using external groups:', externalGroups.length);
       setGroups(externalGroups);
       setLoading(false);
+      
+      // Авто-раскрытие первой группы (если есть только одна группа)
+      if (externalGroups.length === 1) {
+        const firstGroup = externalGroups[0];
+        console.log('🔄 Auto-expanding first group:', firstGroup.name);
+        setTimeout(() => {
+          toggleGroupExpansion(firstGroup.id, false);
+        }, 500);
+      }
     }
-  }, [externalGroups]);
-
-  // Функция загрузки групп
+  }, [externalGroups]);  // Функция загрузки групп
   const fetchGroups = async () => {
     try {
       setLoading(true);
@@ -309,7 +317,12 @@ export function ProductGroupsTable({
       
       // Определяем правильный параметр для API
       const param = isSubgroup ? 'subgroupId' : 'groupId';
-      const url = `/api/products?${param}=${groupId}&showAll=true`;
+      let url = `/api/products?${param}=${groupId}&showAll=true`;
+      
+      // Для основных групп запрашиваем только товары, которые не привязаны к подгруппам
+      if (!isSubgroup) {
+        url += '&subgroupId=null';
+      }
       
       const response = await fetch(url);
       
@@ -320,7 +333,7 @@ export function ProductGroupsTable({
       const data = await response.json();
       const products = data.data || data.products || [];
       
-      console.log(`✅ Loaded ${products.length} products for group ${groupId}`);
+      console.log(`✅ Loaded ${products.length} products for ${isSubgroup ? 'subgroup' : 'group'} ${groupId}`);
       
       setGroupProducts(prev => ({
         ...prev,
@@ -401,7 +414,7 @@ export function ProductGroupsTable({
     setMoveModalOpen(true);
   };
 
-      const handleProductsMoved = () => {
+  const handleProductsMoved = () => {
     // Сбрасываем выделение
     setSelectedProducts(new Set());
     setSelectionMode(false);
@@ -451,22 +464,22 @@ export function ProductGroupsTable({
           )}
           <TableCell className="font-medium">
             <div className="flex items-center gap-2" style={{ paddingLeft: `${indent}px` }}>
-              {/* Кнопка разворачивания/сворачивания */}
-              {hasSubgroups && (
+              {/* Кнопка разворачивания/сворачивания - всегда показываем для групп с подгруппами или товарами */}
+              {(hasSubgroups || group._count?.products > 0) && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-6 w-6 p-0 hover:bg-primary/10"
+                  className="h-8 w-8 p-0 hover:bg-blue-100"
                   onClick={() => toggleGroupExpansion(group.id, level > 0)}
                 >
                   {isExpanded ? (
-                    <ChevronDown className="h-3 w-3" />
+                    <ChevronDown className="h-5 w-5 text-blue-600" />
                   ) : (
-                    <ChevronRight className="h-3 w-3" />
+                    <ChevronRight className="h-5 w-5 text-blue-600" />
                   )}
                 </Button>
               )}
-              {!hasSubgroups && <div className="w-6" />}
+              {!hasSubgroups && group._count?.products === 0 && <div className="w-8" />}
               
               <FolderOpen className="h-4 w-4 text-primary" />
               <div className="flex flex-col">
@@ -496,8 +509,16 @@ export function ProductGroupsTable({
             {group.description || '-'}
           </TableCell>
           <TableCell className="text-center">
-            <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
-              {group._count?.products || 0}
+            <Badge 
+              variant="outline" 
+              className={`${group._count?.products > 0 ? 'bg-blue-100 text-blue-700 border-blue-300 cursor-pointer hover:bg-blue-200' : 'bg-primary/10 text-primary border-primary/20'}`}
+              onClick={() => {
+                if (group._count?.products > 0 && !expandedGroups.has(group.id)) {
+                  toggleGroupExpansion(group.id, level > 0);
+                }
+              }}
+            >
+              {group._count?.products || 0} {group._count?.products > 0 ? 'товар(ов)' : 'товаров'}
             </Badge>
           </TableCell>
           <TableCell className="text-center">
