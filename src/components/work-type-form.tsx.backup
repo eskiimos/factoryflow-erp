@@ -1,0 +1,410 @@
+"use client"
+
+import React, { useState, useEffect } from "react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
+import { useToast } from "@/components/ui/use-toast"
+import { useLanguage } from "@/context/language-context"
+import { WORK_UNITS } from "@/lib/types"
+import { Building2, DollarSign, Clock, FileText, Search } from "lucide-react"
+
+interface Employee {
+  id: string
+  firstName: string
+  lastName: string
+  middleName?: string
+  position: string
+  skillLevel: string
+  departmentId: string
+  department?: {
+    id: string
+    name: string
+  }
+}
+
+interface Department {
+  id: string
+  name: string
+  description?: string
+}
+
+interface WorkType {
+  id: string
+  name: string
+  description?: string
+  departmentId?: string
+  unit: string
+  standardTime: number
+  hourlyRate: number
+  currency: string
+  skillLevel: string
+  isActive: boolean
+  department?: Department
+}
+
+export interface WorkTypeFormProps {
+  isOpen: boolean
+  onClose: () => void
+  workType?: WorkType
+  title: string
+  onSubmit: (data: any) => Promise<void>
+}
+
+export function WorkTypeForm({ isOpen, onClose, workType, title, onSubmit }: WorkTypeFormProps) {
+  const { toast } = useToast()
+  const { t } = useLanguage()
+  const [loading, setLoading] = useState(false)
+  const [departments, setDepartments] = useState<Department[]>([])
+  const [employees, setEmployees] = useState<Employee[]>([])
+  const [filteredEmployees, setFilteredEmployees] = useState<Employee[]>([])
+  const [employeeSearchTerm, setEmployeeSearchTerm] = useState('')
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null)
+  
+  const [formData, setFormData] = useState({
+    name: "",
+    description: "",
+    departmentId: "",
+    unit: "",
+    rate: "",
+    currency: "RUB",
+    executorId: "",
+    estimatedTime: "",
+    isActive: true
+  })
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchDepartments()
+      fetchEmployees()
+    }
+  }, [isOpen])
+
+  useEffect(() => {
+    if (workType && isOpen) {
+      setFormData({
+        name: workType.name || "",
+        description: workType.description || "",
+        departmentId: workType.departmentId || "",
+        unit: workType.unit || "",
+        rate: workType.hourlyRate?.toString() || "",
+        currency: workType.currency || "RUB",
+        executorId: "",
+        estimatedTime: workType.standardTime?.toString() || "",
+        isActive: workType.isActive !== undefined ? workType.isActive : true
+      })
+    } else if (isOpen) {
+      setFormData({
+        name: "",
+        description: "",
+        departmentId: "",
+        unit: "",
+        rate: "",
+        currency: "RUB",
+        executorId: "",
+        estimatedTime: "",
+        isActive: true
+      })
+      setSelectedEmployee(null)
+      setEmployeeSearchTerm("")
+    }
+  }, [workType, isOpen])
+
+  useEffect(() => {
+    let filtered = employees
+    if (formData.departmentId) {
+      filtered = filtered.filter(emp => emp.departmentId === formData.departmentId)
+    }
+    if (employeeSearchTerm) {
+      filtered = filtered.filter(emp =>
+        (emp.firstName + ' ' + emp.lastName).toLowerCase().includes(employeeSearchTerm.toLowerCase()) ||
+        emp.position.toLowerCase().includes(employeeSearchTerm.toLowerCase())
+      )
+    }
+    setFilteredEmployees(filtered)
+    if (selectedEmployee && !filtered.find(emp => emp.id === selectedEmployee.id)) {
+      setSelectedEmployee(null)
+      setFormData(prev => ({ ...prev, executorId: '' }))
+    }
+  }, [employees, formData.departmentId, employeeSearchTerm, selectedEmployee])
+
+  const fetchDepartments = async () => {
+    try {
+      const response = await fetch("/api/departments")
+      const result = await response.json()
+      if (result.success) {
+        setDepartments(result.data || [])
+      }
+    } catch (error) {
+      console.error("Error fetching departments:", error)
+    }
+  }
+
+  const fetchEmployees = async () => {
+    try {
+      const response = await fetch("/api/employees")
+      const result = await response.json()
+      if (result.success) {
+        setEmployees(result.data || [])
+        setFilteredEmployees(result.data || [])
+      }
+    } catch (error) {
+      console.error("Error fetching employees:", error)
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!formData.name.trim()) {
+      toast({
+        variant: "error",
+        title: "Ошибка валидации",
+        description: "Название вида работы обязательно для заполнения"
+      })
+      return
+    }
+
+    if (!formData.departmentId) {
+      toast({
+        variant: "error",
+        title: "Ошибка валидации", 
+        description: "Выберите отдел"
+      })
+      return
+    }
+
+    if (!formData.executorId) {
+      toast({
+        variant: "error",
+        title: "Ошибка валидации",
+        description: "Выберите исполнителя"
+      })
+      return
+    }
+
+    setLoading(true)
+    try {
+      await onSubmit({
+        ...formData,
+        hourlyRate: parseFloat(formData.rate),
+        standardTime: parseFloat(formData.estimatedTime),
+        skillLevel: selectedEmployee?.skillLevel || "Рабочий",
+        executor: selectedEmployee
+      })
+      onClose()
+    } catch (error) {
+      console.error("Error submitting form:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleInputChange = (field: string, value: string | boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[600px]">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="name">Название вида работы *</Label>
+              <div className="relative">
+                <FileText className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => handleInputChange("name", e.target.value)}
+                  className="pl-9"
+                  placeholder="Например, Сварочные работы"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="department">Отдел *</Label>
+              <Select value={formData.departmentId} onValueChange={(value) => handleInputChange("departmentId", value)}>
+                <SelectTrigger>
+                  <SelectValue>
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-gray-400" />
+                      {departments.find(d => d.id === formData.departmentId)?.name || "Выберите отдел"}
+                    </div>
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {departments.map(department => (
+                    <SelectItem key={department.id} value={department.id}>
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4 text-gray-400" />
+                        {department.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="unit">Единица измерения *</Label>
+              <Select value={formData.unit} onValueChange={(value) => handleInputChange("unit", value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Выберите единицу" />
+                </SelectTrigger>
+                <SelectContent>
+                  {WORK_UNITS.map(unit => (
+                    <SelectItem key={unit.value} value={unit.value}>
+                      {unit.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="rate">Тариф *</Label>
+              <div className="relative">
+                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  id="rate"
+                  type="number"
+                  step="0.01"
+                  value={formData.rate}
+                  onChange={(e) => handleInputChange("rate", e.target.value)}
+                  className="pl-9"
+                  placeholder="0.00"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="currency">Валюта</Label>
+              <Select value={formData.currency} onValueChange={(value) => handleInputChange("currency", value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="RUB">₽ Рубли</SelectItem>
+                  <SelectItem value="USD">$ Доллары</SelectItem>
+                  <SelectItem value="EUR">€ Евро</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="executor">Исполнитель *</Label>
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Поиск сотрудника..."
+                    value={employeeSearchTerm}
+                    onChange={(e) => setEmployeeSearchTerm(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                <div className="border rounded-md max-h-32 overflow-y-auto">
+                  {filteredEmployees.length > 0 ? (
+                    filteredEmployees.map((employee) => (
+                      <div
+                        key={employee.id}
+                        className={"p-2 cursor-pointer hover:bg-gray-50 text-sm border-b last:border-b-0 " + 
+                          (selectedEmployee?.id === employee.id ? 'bg-blue-50 text-blue-900' : '')
+                        }
+                        onClick={() => {
+                          setSelectedEmployee(employee)
+                          setFormData(prev => ({ ...prev, executorId: employee.id }))
+                        }}
+                      >
+                        <div className="font-medium">
+                          {employee.firstName} {employee.lastName}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {employee.position} • {employee.department?.name}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-2 text-sm text-gray-500 text-center">
+                      {formData.departmentId ? 'Нет сотрудников' : 'Сначала выберите отдел'}
+                    </div>
+                  )}
+                </div>
+                {selectedEmployee && (
+                  <div className="text-xs text-blue-600">
+                    Выбран: {selectedEmployee.firstName} {selectedEmployee.lastName} ({selectedEmployee.skillLevel})
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="estimatedTime">Время выполнения (мин)</Label>
+              <div className="relative">
+                <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  id="estimatedTime"
+                  type="number"
+                  step="1"
+                  value={formData.estimatedTime}
+                  onChange={(e) => handleInputChange("estimatedTime", e.target.value)}
+                  className="pl-9"
+                  placeholder="60"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="description">Описание</Label>
+            <Textarea
+              id="description"
+              value={formData.description}
+              onChange={(e) => handleInputChange("description", e.target.value)}
+              placeholder="Подробное описание вида работы"
+              rows={3}
+            />
+          </div>
+
+          <div className="flex items-center justify-between p-4 border rounded-lg">
+            <div className="space-y-0.5">
+              <Label htmlFor="active">Активен</Label>
+              <div className="text-sm text-gray-500">
+                Деактивированные виды работ не отображаются в списке выбора
+              </div>
+            </div>
+            <Switch
+              id="active"
+              checked={formData.isActive}
+              onCheckedChange={(checked) => handleInputChange("isActive", checked)}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Отмена
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? "Сохранение..." : "Сохранить"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}

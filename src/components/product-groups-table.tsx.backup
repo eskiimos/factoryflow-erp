@@ -1,0 +1,1153 @@
+'use client';
+
+import React, { useState, useEffect, useMemo, Fragment } from 'react';
+import { useRouter } from 'next/navigation';
+import { Edit, Trash2, MoreHorizontal, FolderOpen, Plus, Search, ChevronRight, ChevronDown, Package, Folder, FolderTree, Loader2, GripVertical, Move } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { useToast } from '@/components/ui/use-toast';
+import { TableControls, ColumnVisibility } from '@/components/table-controls';
+import { TableSearch } from '@/components/table-search';
+import { CreateGroupModal } from '@/components/create-group-modal';
+import { GroupDropZone } from '@/components/group-drop-zone';
+import { DraggableProductRow } from '@/components/draggable-product-row';
+import { MoveProductsModal } from '@/components/move-products-modal';
+import type { ProductGroup, ProductSubgroup, Product } from '@/types/product-groups';
+
+interface ProductGroupsTableProps {
+  groups?: ProductGroup[];
+  onGroupsChange?: () => void;
+  onEdit?: (group: ProductGroup) => void;
+  onCreateSubgroup?: (parent: { group?: ProductGroup; subgroup?: ProductSubgroup }) => void;
+  onEditSubgroup?: (subgroup: ProductSubgroup) => void;
+}
+
+// Определение колонок таблицы групп
+const TABLE_COLUMNS = [
+  { key: 'name', label: 'Название', required: true },
+  { key: 'description', label: 'Описание', required: false },
+  { key: 'productsCount', label: 'Товаров', required: true },
+  { key: 'status', label: 'Статус', required: false },
+  { key: 'createdAt', label: 'Создана', required: false },
+  { key: 'actions', label: 'Действия', required: true },
+];
+
+export function ProductGroupsTable({
+  groups: externalGroups,
+  onGroupsChange,
+  onEdit,
+  onCreateSubgroup,
+  onEditSubgroup,
+}: ProductGroupsTableProps) {
+  const [groups, setGroups] = useState<ProductGroup[]>([]);
+  const [loading, setLoading] = useState(!externalGroups);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredGroups, setFilteredGroups] = useState<ProductGroup[]>([]);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [expandedSubgroups, setExpandedSubgroups] = useState<Set<string>>(new Set());
+  const [groupProducts, setGroupProducts] = useState<Record<string, Product[]>>({});
+  const [loadingProducts, setLoadingProducts] = useState<Set<string>>(new Set());
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [inlineCreateMode, setInlineCreateMode] = useState<Record<string, boolean>>({});
+  const [inlineCreateSubgroupMode, setInlineCreateSubgroupMode] = useState<Record<string, boolean>>({});
+  const [newSubgroupName, setNewSubgroupName] = useState<Record<string, string>>({});
+  const [newSubSubgroupName, setNewSubSubgroupName] = useState<Record<string, string>>({});
+  const [creatingSubgroup, setCreatingSubgroup] = useState<Set<string>>(new Set());
+  const [creatingSubSubgroup, setCreatingSubSubgroup] = useState<Set<string>>(new Set());
+  
+  // Состояние для drag-and-drop
+  const [draggedProductId, setDraggedProductId] = useState<string | null>(null);
+  const [isDragActive, setIsDragActive] = useState(false);
+  
+  // Состояние для чекбоксов и массового перемещения
+  const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [moveModalOpen, setMoveModalOpen] = useState(false);
+  
+  const [columnVisibility, setColumnVisibility] = useState<ColumnVisibility>(() => {
+    // По умолчанию все столбцы видимы
+    const defaultVisibility: ColumnVisibility = {};
+    TABLE_COLUMNS.forEach(column => {
+      defaultVisibility[column.key] = true;
+    });
+    return defaultVisibility;
+  });
+  const router = useRouter();
+  const { toast } = useToast();
+
+  // Загружаем настройки столбцов из localStorage после монтирования
+  useEffect(() => {
+    const saved = localStorage.getItem('product-groups-table-columns');
+    if (saved) {
+      try {
+        setColumnVisibility(JSON.parse(saved));
+      } catch (error) {
+        console.error('Error loading column visibility:', error);
+      }
+    }
+  }, []);
+
+  // Сохраняем настройки столбцов в localStorage
+  useEffect(() => {
+    localStorage.setItem('product-groups-table-columns', JSON.stringify(columnVisibility));
+  }, [columnVisibility]);
+
+  // Загрузка групп, если не переданы извне
+  useEffect(() => {
+    if (externalGroups) {
+      setGroups(externalGroups);
+      setLoading(false);
+    } else {
+      fetchGroups();
+    }
+  }, [externalGroups]);
+
+  const fetchGroups = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/product-groups');
+      if (!response.ok) {
+        throw new Error('Failed to fetch product groups');
+      }
+      const data = await response.json();
+      setGroups(data.data || []);
+    } catch (error) {
+      console.error('Error fetching product groups:', error);
+      toast({
+        title: "Ошибка",
+        description: "Не удалось загрузить группы товаров",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Обработчик поиска
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+  };
+
+  // Фильтрация групп по поисковому запросу
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredGroups(groups);
+    } else {
+      const filtered = groups.filter(group => 
+        group.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (group.description && group.description.toLowerCase().includes(searchQuery.toLowerCase()))
+      );
+      setFilteredGroups(filtered);
+    }
+  }, [groups, searchQuery]);
+
+  // Определяем какие группы показывать
+  const displayGroups = searchQuery ? filteredGroups : groups;
+
+  // Функция для переключения раскрытия группы
+  const toggleGroupExpansion = async (groupId: string) => {
+    const newExpandedGroups = new Set(expandedGroups);
+    
+    if (expandedGroups.has(groupId)) {
+      // Сворачиваем группу
+      newExpandedGroups.delete(groupId);
+    } else {
+      // Раскрываем группу и загружаем товары, если еще не загружены
+      newExpandedGroups.add(groupId);
+      
+      if (!groupProducts[groupId]) {
+        await fetchGroupProducts(groupId);
+      }
+    }
+    
+    setExpandedGroups(newExpandedGroups);
+  };
+
+  // Функция для переключения раскрытия подгруппы
+  const toggleSubgroupExpansion = async (subgroupId: string) => {
+    const newExpandedSubgroups = new Set(expandedSubgroups);
+    
+    if (expandedSubgroups.has(subgroupId)) {
+      newExpandedSubgroups.delete(subgroupId);
+    } else {
+      newExpandedSubgroups.add(subgroupId);
+      
+      if (!groupProducts[subgroupId]) {
+        await fetchGroupProducts(subgroupId, 'subgroup');
+      }
+    }
+    
+    setExpandedSubgroups(newExpandedSubgroups);
+  };
+
+  // Загрузка товаров для конкретной группы или подгруппы
+  const fetchGroupProducts = async (id: string, type: 'group' | 'subgroup' = 'group') => {
+    if (loadingProducts.has(id)) return;
+    
+    try {
+      setLoadingProducts(prev => new Set(prev).add(id));
+      
+      const param = type === 'group' ? `groupId=${id}` : `subgroupId=${id}`;
+      const response = await fetch(`/api/products?${param}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch products');
+      }
+      
+      const data = await response.json();
+      setGroupProducts(prev => ({
+        ...prev,
+        [id]: data.data || []
+      }));
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      toast({
+        title: "Ошибка",
+        description: `Не удалось загрузить товары ${type === 'group' ? 'группы' : 'подгруппы'}`,
+        variant: "destructive"
+      });
+    } finally {
+      setLoadingProducts(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(id);
+        return newSet;
+      });
+    }
+  };
+
+  // Функции для drag-and-drop
+  const handleDragStart = (productId: string) => {
+    setDraggedProductId(productId);
+    setIsDragActive(true);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedProductId(null);
+    setIsDragActive(false);
+  };
+
+  // Оптимистичное обновление после перемещения товаров
+  const handleProductMoved = async (fromId?: string, toId?: string) => {
+    // Для оптимизации: обновляем только затронутые группы, а не всю таблицу
+    const groupsToUpdate = new Set([fromId, toId].filter(Boolean));
+    
+    for (const groupId of groupsToUpdate) {
+      if (groupId) {
+        await fetchGroupProducts(groupId);
+      }
+    }
+    
+    // Обновляем счетчики групп
+    if (onGroupsChange) {
+      onGroupsChange();
+    }
+  };
+
+  // Функции для работы с чекбоксами
+  const handleProductSelect = (productId: string, checked: boolean) => {
+    const newSelected = new Set(selectedProducts);
+    if (checked) {
+      newSelected.add(productId);
+    } else {
+      newSelected.delete(productId);
+    }
+    setSelectedProducts(newSelected);
+  };
+
+  const handleSelectAll = () => {
+    // Собираем все товары из всех загруженных групп
+    const allProducts: Product[] = [];
+    Object.values(groupProducts).forEach(products => {
+      allProducts.push(...products);
+    });
+    
+    if (selectedProducts.size === allProducts.length) {
+      setSelectedProducts(new Set());
+    } else {
+      const allIds = new Set(allProducts.map(product => product.id));
+      setSelectedProducts(allIds);
+    }
+  };
+
+  const handleMoveProducts = () => {
+    if (selectedProducts.size === 0) {
+      toast({
+        title: "Внимание", 
+        description: "Выберите товары для перемещения",
+        variant: "destructive"
+      });
+      return;
+    }
+    setMoveModalOpen(true);
+  };
+
+  const handleProductsMoved = () => {
+    // Сбрасываем выделение
+    setSelectedProducts(new Set());
+    setSelectionMode(false);
+    
+    // Обновляем данные
+    if (onGroupsChange) {
+      onGroupsChange();
+    }
+    
+    // Обновляем товары в группах
+    Object.keys(groupProducts).forEach(groupId => {
+      fetchGroupProducts(groupId);
+    });
+  };
+
+  // Функция для получения выбранных продуктов
+  const getSelectedProducts = (): Product[] => {
+    const allProducts: Product[] = [];
+    Object.values(groupProducts).forEach(products => {
+      allProducts.push(...products);
+    });
+    return allProducts.filter(product => selectedProducts.has(product.id));
+  };
+
+  // Обновление списка групп (после создания новой группы)
+  const handleGroupCreated = () => {
+    if (externalGroups && onGroupsChange) {
+      onGroupsChange();
+    } else {
+      fetchGroups();
+    }
+  };
+
+  // Рендер подгруппы
+  const renderSubgroup = (subgroup: ProductSubgroup, level: number = 1): React.ReactElement => {
+    const isExpanded = expandedSubgroups.has(subgroup.id);
+    const hasProducts = subgroup._count?.products || 0;
+    const hasSubgroups = subgroup.subgroups && subgroup.subgroups.length > 0;
+    const canExpand = hasProducts > 0 || hasSubgroups;
+    
+    const indentClass = level === 1 ? 'pl-8' : level === 2 ? 'pl-16' : 'pl-24';
+    const icon = level === 1 
+      ? <Folder className="h-4 w-4 text-blue-500" /> 
+      : level === 2 
+        ? <FolderTree className="h-4 w-4 text-purple-500" />
+        : <FolderTree className="h-3 w-3 text-orange-500" />;
+    
+    return (
+      <Fragment>
+        <GroupDropZone
+          groupId={subgroup.groupId}
+          subgroupId={subgroup.id}
+          onProductsMoved={() => {
+            handleProductMoved(undefined, subgroup.id);
+          }}
+          groups={groups}
+          className="contents"
+          isDragActive={isDragActive}
+        >
+          <TableRow key={`subgroup-${subgroup.id}`} className="bg-slate-50/50 hover:bg-slate-100/50">
+          {columnVisibility.name && (
+            <TableCell className={`font-medium ${indentClass}`}>
+              <div className="flex items-center gap-2">
+                {canExpand && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 hover:bg-muted"
+                    onClick={() => toggleSubgroupExpansion(subgroup.id)}
+                  >
+                    {isExpanded ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                  </Button>
+                )}
+                {!canExpand && <div className="w-6" />}
+                {icon}
+                <span className="text-slate-700">{subgroup.name}</span>
+              </div>
+            </TableCell>
+          )}
+          {columnVisibility.description && (
+            <TableCell className="text-sm text-slate-600">
+              {subgroup.description || '-'}
+            </TableCell>
+          )}
+          {columnVisibility.productsCount && (
+            <TableCell className="text-center">
+              <Badge variant="outline" className="bg-slate-100 text-slate-700 border-slate-300">
+                {hasProducts}
+              </Badge>
+            </TableCell>
+          )}
+          {columnVisibility.status && (
+            <TableCell className="text-center">
+              <Badge 
+                variant={subgroup.isActive ? 'default' : 'secondary'}
+                className={subgroup.isActive ? 'bg-green-100 text-green-800 hover:bg-green-100' : ''}
+              >
+                {subgroup.isActive ? 'Активна' : 'Неактивна'}
+              </Badge>
+            </TableCell>
+          )}
+          {columnVisibility.createdAt && (
+            <TableCell className="text-sm text-slate-600">
+              {new Date(subgroup.createdAt).toLocaleDateString('ru-RU', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+              })}
+            </TableCell>
+          )}
+          {columnVisibility.actions && (
+            <TableCell>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {level < 2 && (
+                    <>
+                      <DropdownMenuItem onClick={() => onCreateSubgroup?.({ subgroup })}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Создать подгруппу
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => startInlineSubSubgroupCreation(subgroup.id)}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Быстро создать подгруппу
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  <DropdownMenuItem onClick={() => onEditSubgroup?.(subgroup)}>
+                    <Edit className="h-4 w-4 mr-2" />
+                    Редактировать
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => handleDeleteSubgroup(subgroup.id, subgroup.name)}
+                    className="text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Удалить
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </TableCell>
+          )}
+        </TableRow>
+        </GroupDropZone>
+
+        {/* Товары подгруппы */}
+        {isExpanded && hasProducts > 0 && (
+          <>
+            {loadingProducts.has(subgroup.id) ? (
+              <TableRow>
+                <TableCell 
+                  colSpan={Object.values(columnVisibility).filter(Boolean).length}
+                  className="text-center py-4 text-muted-foreground"
+                >
+                  Загрузка товаров...
+                </TableCell>
+              </TableRow>
+            ) : groupProducts[subgroup.id]?.length > 0 ? (
+              groupProducts[subgroup.id].map((product) => (
+                <DraggableProductRow
+                  key={`product-${product.id}`}
+                  product={product}
+                  columnVisibility={columnVisibility}
+                  level={level}
+                  onProductMoved={() => handleProductMoved(subgroup.id)}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                  isDragActive={isDragActive}
+                  selectionMode={selectionMode}
+                  isSelected={selectedProducts.has(product.id)}
+                  onSelect={handleProductSelect}
+                />
+              ))
+            ) : (
+              <TableRow>
+                <TableCell 
+                  colSpan={Object.values(columnVisibility).filter(Boolean).length}
+                  className="text-center py-4 text-muted-foreground text-sm"
+                >
+                  В этой подгруппе пока нет товаров
+                </TableCell>
+              </TableRow>
+            )}
+          </>
+        )}
+
+        {/* Поле для встроенного создания под-подгруппы */}
+        {isExpanded && level === 1 && inlineCreateSubgroupMode[subgroup.id] && (
+          <TableRow className="bg-purple-50/50">
+            <TableCell colSpan={Object.values(columnVisibility).filter(Boolean).length} className="pl-20">
+              <div className="flex items-center gap-2 py-2">
+                <FolderTree className="h-4 w-4 text-purple-500" />
+                <Input
+                  value={newSubSubgroupName[subgroup.id] || ''}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewSubSubgroupName(prev => ({ ...prev, [subgroup.id]: e.target.value }))}
+                  placeholder="Название под-подгруппы..."
+                  className="flex-1 h-8"
+                  onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => handleKeyPressSubSubgroup(e, subgroup.id)}
+                  autoFocus
+                />
+                <Button
+                  size="sm"
+                  onClick={() => handleInlineSubSubgroupCreate(subgroup.id)}
+                  disabled={creatingSubSubgroup.has(subgroup.id)}
+                  className="h-8 px-3"
+                >
+                  {creatingSubSubgroup.has(subgroup.id) ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    'Создать'
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => cancelInlineSubSubgroupCreation(subgroup.id)}
+                  className="h-8 px-3"
+                >
+                  Отмена
+                </Button>
+              </div>
+            </TableCell>
+          </TableRow>
+        )}
+
+        {/* Рекурсивно рендерим под-подгруппы */}
+        {isExpanded && hasSubgroups && subgroup.subgroups?.map((childSubgroup) => 
+          renderSubgroup(childSubgroup, level + 1)
+        )}
+      </Fragment>
+    );
+  };
+
+  const handleDelete = async (groupId: string, groupName: string) => {
+    if (!confirm(`Вы уверены, что хотите удалить группу "${groupName}"?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/product-groups/${groupId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete product group');
+      }
+
+      toast({
+        title: "Успешно",
+        description: "Группа товаров удалена"
+      });
+
+      // Обновляем список групп
+      if (onGroupsChange) {
+        onGroupsChange();
+      } else {
+        fetchGroups();
+      }
+    } catch (error) {
+      console.error('Error deleting product group:', error);
+      toast({
+        title: "Ошибка",
+        description: "Не удалось удалить группу товаров",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDeleteSubgroup = async (subgroupId: string, subgroupName: string) => {
+    if (!confirm(`Вы уверены, что хотите удалить подгруппу "${subgroupName}"?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/product-groups/subgroups/${subgroupId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete subgroup');
+      }
+
+      toast({
+        title: "Успешно",
+        description: "Подгруппа товаров удалена"
+      });
+
+      // Обновляем список групп
+      if (onGroupsChange) {
+        onGroupsChange();
+      } else {
+        fetchGroups();
+      }
+    } catch (error) {
+      console.error('Error deleting subgroup:', error);
+      toast({
+        title: "Ошибка",
+        description: error instanceof Error ? error.message : "Не удалось удалить подгруппу товаров",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Функции для инлайн-создания подгрупп
+  const startInlineSubgroupCreation = (groupId: string) => {
+    setInlineCreateMode(prev => ({ ...prev, [groupId]: true }));
+    setNewSubgroupName(prev => ({ ...prev, [groupId]: '' }));
+    // Автоматически разворачиваем группу
+    setExpandedGroups(prev => new Set([...prev, groupId]));
+  };
+
+  const cancelInlineSubgroupCreation = (groupId: string) => {
+    setInlineCreateMode(prev => ({ ...prev, [groupId]: false }));
+    setNewSubgroupName(prev => ({ ...prev, [groupId]: '' }));
+  };
+
+  const handleInlineSubgroupCreate = async (groupId: string) => {
+    const name = newSubgroupName[groupId]?.trim();
+    if (!name) {
+      toast({
+        title: "Ошибка",
+        description: "Введите название подгруппы",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setCreatingSubgroup(prev => new Set([...prev, groupId]));
+
+    try {
+      const response = await fetch('/api/product-groups/subgroups', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name,
+          groupId,
+          isActive: true
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create subgroup');
+      }
+
+      toast({
+        title: "Успешно",
+        description: "Подгруппа создана"
+      });
+
+      // Сбрасываем состояние
+      cancelInlineSubgroupCreation(groupId);
+
+      // Обновляем список групп
+      if (onGroupsChange) {
+        onGroupsChange();
+      } else {
+        fetchGroups();
+      }
+    } catch (error) {
+      console.error('Error creating subgroup:', error);
+      toast({
+        title: "Ошибка",
+        description: error instanceof Error ? error.message : "Не удалось создать подгруппу",
+        variant: "destructive"
+      });
+    } finally {
+      setCreatingSubgroup(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(groupId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent, groupId: string) => {
+    if (e.key === 'Enter') {
+      handleInlineSubgroupCreate(groupId);
+    } else if (e.key === 'Escape') {
+      cancelInlineSubgroupCreation(groupId);
+    }
+  };
+
+  // Функции для создания под-подгрупп inline
+  const startInlineSubSubgroupCreation = (subgroupId: string) => {
+    setInlineCreateSubgroupMode(prev => ({ ...prev, [subgroupId]: true }));
+  };
+
+  const cancelInlineSubSubgroupCreation = (subgroupId: string) => {
+    setInlineCreateSubgroupMode(prev => ({ ...prev, [subgroupId]: false }));
+    setNewSubSubgroupName(prev => ({ ...prev, [subgroupId]: '' }));
+  };
+
+  const handleInlineSubSubgroupCreate = async (subgroupId: string) => {
+    const name = newSubSubgroupName[subgroupId]?.trim();
+    if (!name) {
+      toast({
+        title: "Ошибка",
+        description: "Введите название подгруппы",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Найдем родительскую подгруппу для получения groupId
+    const parentSubgroup = groups
+      .flatMap(g => g.subgroups || [])
+      .find(sg => sg.id === subgroupId);
+
+    if (!parentSubgroup) {
+      toast({
+        title: "Ошибка",
+        description: "Родительская подгруппа не найдена",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setCreatingSubSubgroup(prev => new Set([...prev, subgroupId]));
+
+    try {
+      const response = await fetch('/api/product-groups/subgroups', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name,
+          groupId: parentSubgroup.groupId,
+          parentId: subgroupId,
+          isActive: true
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create subgroup');
+      }
+
+      toast({
+        title: "Успешно",
+        description: "Подгруппа создана"
+      });
+
+      // Сбрасываем состояние
+      cancelInlineSubSubgroupCreation(subgroupId);
+
+      // Обновляем список групп
+      if (onGroupsChange) {
+        onGroupsChange();
+      } else {
+        fetchGroups();
+      }
+    } catch (error) {
+      console.error('Error creating sub-subgroup:', error);
+      toast({
+        title: "Ошибка",
+        description: error instanceof Error ? error.message : "Не удалось создать подгруппу",
+        variant: "destructive"
+      });
+    } finally {
+      setCreatingSubSubgroup(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(subgroupId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleKeyPressSubSubgroup = (e: React.KeyboardEvent, subgroupId: string) => {
+    if (e.key === 'Enter') {
+      handleInlineSubSubgroupCreate(subgroupId);
+    } else if (e.key === 'Escape') {
+      cancelInlineSubSubgroupCreation(subgroupId);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center p-8">
+        <div className="flex flex-col items-center gap-3">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <p className="text-sm text-muted-foreground">Загрузка групп...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (groups.length === 0) {
+    return (
+      <div className="flex flex-col justify-center items-center p-8 text-center">
+        <FolderOpen className="h-16 w-16 mb-4 text-muted-foreground/50" />
+        <h3 className="text-lg font-semibold mb-2">Нет групп товаров</h3>
+        <p className="text-muted-foreground mb-4 max-w-sm">
+          Создайте группы для организации товаров по категориям
+        </p>
+        <Button onClick={() => setCreateModalOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Создать группу
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* Toolbar with search and controls */}
+      <div className="flex-shrink-0 p-4 border-b border-border/10 space-y-4">
+        {/* Search */}
+        <TableSearch
+          placeholder="Поиск по названию или описанию группы..."
+          onSearch={handleSearch}
+          className="w-full"
+        />
+        
+        {/* Controls */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-muted-foreground">
+              {searchQuery ? (
+                <>Найдено: <span className="font-medium">{displayGroups.length}</span> из {groups.length}</>
+              ) : (
+                <>Всего групп: <span className="font-medium">{groups.length}</span></>
+              )}
+            </div>
+            <div className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded">
+              🔄 Перетащите товары между группами для быстрого перемещения
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {!selectionMode ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectionMode(true)}
+              >
+                <Package className="h-4 w-4 mr-2" />
+                Выбрать товары
+              </Button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="text-sm text-muted-foreground">
+                  Выбрано: {selectedProducts.size}
+                </div>
+                {selectedProducts.size > 0 && (
+                  <Button
+                    size="sm"
+                    onClick={handleMoveProducts}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    <Move className="h-4 w-4 mr-2" />
+                    Переместить
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedProducts(new Set())}
+                >
+                  Очистить
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSelectionMode(false);
+                    setSelectedProducts(new Set());
+                  }}
+                >
+                  Отмена
+                </Button>
+              </div>
+            )}
+            
+            <TableControls
+              columns={TABLE_COLUMNS}
+              visibility={columnVisibility}
+              onVisibilityChange={setColumnVisibility}
+            />
+          </div>
+      </div>
+
+      {/* Table content */}
+      {searchQuery && displayGroups.length === 0 ? (
+        <div className="flex-1 flex flex-col justify-center items-center p-8 text-center">
+          <Search className="h-16 w-16 mb-4 text-muted-foreground/50" />
+          <h3 className="text-lg font-semibold mb-2">Ничего не найдено</h3>
+          <p className="text-muted-foreground mb-4 max-w-sm">
+            Попробуйте изменить поисковый запрос или очистить фильтры
+          </p>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-auto">
+          <Table>
+            <TableHeader className="sticky top-0 bg-background z-10">
+              <TableRow className="border-b">
+                {selectionMode && (
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={selectedProducts.size > 0}
+                      onCheckedChange={handleSelectAll}
+                    />
+                  </TableHead>
+                )}
+                {columnVisibility.name && <TableHead className="font-semibold">Название</TableHead>}
+                {columnVisibility.description && <TableHead className="font-semibold">Описание</TableHead>}
+                {columnVisibility.productsCount && <TableHead className="font-semibold text-center">Товаров</TableHead>}
+                {columnVisibility.status && <TableHead className="font-semibold text-center">Статус</TableHead>}
+                {columnVisibility.createdAt && <TableHead className="font-semibold">Создана</TableHead>}
+                {columnVisibility.actions && <TableHead className="w-12"></TableHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {displayGroups.map((group) => (
+                <Fragment key={group.id}>
+                  {/* Основная группа */}
+                  <GroupDropZone
+                    groupId={group.id}
+                    onProductsMoved={() => {
+                      handleProductMoved(undefined, group.id);
+                    }}
+                    groups={groups}
+                    className="contents"
+                    isDragActive={isDragActive}
+                  >
+                    <TableRow className="hover:bg-muted/50 transition-colors group">
+                    {selectionMode && (
+                      <TableCell className="w-12">
+                        {/* Пустая ячейка для чекбокса группы */}
+                      </TableCell>
+                    )}
+                    {columnVisibility.name && (
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {((group._count?.products || 0) > 0 || (group.subgroups?.length || 0) > 0) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 hover:bg-muted"
+                              onClick={() => toggleGroupExpansion(group.id)}
+                            >
+                              {expandedGroups.has(group.id) ? (
+                                <ChevronDown className="h-4 w-4" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4" />
+                              )}
+                            </Button>
+                          )}
+                          {(!(group._count?.products || 0) && !(group.subgroups?.length || 0)) && (
+                            <div className="w-6" />
+                          )}
+                          <FolderOpen className="h-4 w-4 text-primary" />
+                          <span className="text-primary">{group.name}</span>
+                          
+                          {/* Кнопка быстрого создания подгруппы */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity ml-1"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startInlineSubgroupCreation(group.id);
+                            }}
+                            title="Быстро создать подгруппу"
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    )}
+                {columnVisibility.description && (
+                  <TableCell className="max-w-xs truncate text-muted-foreground">
+                    {group.description || '-'}
+                  </TableCell>
+                )}
+                {columnVisibility.productsCount && (
+                  <TableCell className="text-center">
+                    <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                      {group._count?.products || 0}
+                    </Badge>
+                  </TableCell>
+                )}
+                {columnVisibility.status && (
+                  <TableCell className="text-center">
+                    <Badge 
+                      variant={group.isActive ? 'default' : 'secondary'}
+                      className={group.isActive ? 'bg-green-100 text-green-800 hover:bg-green-100' : ''}
+                    >
+                      {group.isActive ? 'Активна' : 'Неактивна'}
+                    </Badge>
+                  </TableCell>
+                )}
+                {columnVisibility.createdAt && (
+                  <TableCell className="text-muted-foreground">
+                    {new Date(group.createdAt).toLocaleDateString('ru-RU', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric'
+                    })}
+                  </TableCell>
+                )}
+                {columnVisibility.actions && (
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => onCreateSubgroup?.({ group })}>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Создать подгруппу
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => onEdit ? onEdit(group) : router.push(`/products/groups/${group.id}/edit`)}
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          Редактировать
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => handleDelete(group.id, group.name)}
+                          className="text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Удалить
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                )}
+              </TableRow>
+            </GroupDropZone>
+
+              {/* Инлайн-создание подгруппы */}
+              {inlineCreateMode[group.id] && (
+                <TableRow className="bg-blue-50/50 border-l-4 border-l-blue-400">
+                  {selectionMode && (
+                    <TableCell className="w-12">
+                      {/* Пустая ячейка для чекбокса */}
+                    </TableCell>
+                  )}
+                  {columnVisibility.name && (
+                    <TableCell>
+                      <div className="flex items-center gap-2 ml-8">
+                        <FolderTree className="h-4 w-4 text-blue-600" />
+                        <input
+                          type="text"
+                          value={newSubgroupName[group.id] || ''}
+                          onChange={(e) => setNewSubgroupName(prev => ({ ...prev, [group.id]: e.target.value }))}
+                          onKeyDown={(e) => handleKeyPress(e, group.id)}
+                          placeholder="Название подгруппы..."
+                          className="flex-1 px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          autoFocus
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => handleInlineSubgroupCreate(group.id)}
+                          disabled={creatingSubgroup.has(group.id) || !newSubgroupName[group.id]?.trim()}
+                          className="h-7 px-2"
+                        >
+                          {creatingSubgroup.has(group.id) ? (
+                            <div className="animate-spin rounded-full h-3 w-3 border-b border-white"></div>
+                          ) : (
+                            'Создать'
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => cancelInlineSubgroupCreation(group.id)}
+                          className="h-7 px-2"
+                        >
+                          Отмена
+                        </Button>
+                      </div>
+                    </TableCell>
+                  )}
+                  {columnVisibility.description && <TableCell></TableCell>}
+                  {columnVisibility.productsCount && <TableCell></TableCell>}
+                  {columnVisibility.status && <TableCell></TableCell>}
+                  {columnVisibility.createdAt && <TableCell></TableCell>}
+                  {columnVisibility.actions && <TableCell></TableCell>}
+                </TableRow>
+              )}
+
+              {/* Подгруппы */}
+              {expandedGroups.has(group.id) && group.subgroups?.map((subgroup) => 
+                renderSubgroup(subgroup, 1)
+              )}
+
+              {/* Отображение товаров группы */}
+              {expandedGroups.has(group.id) && (
+                <>
+                  {loadingProducts.has(group.id) ? (
+                    <TableRow>
+                      <TableCell 
+                        colSpan={Object.values(columnVisibility).filter(Boolean).length + (selectionMode ? 1 : 0)}
+                        className="text-center py-4 text-muted-foreground"
+                      >
+                        Загрузка товаров...
+                      </TableCell>
+                    </TableRow>
+                  ) : groupProducts[group.id]?.length > 0 ? (
+                    groupProducts[group.id].map((product) => (
+                      <DraggableProductRow
+                        key={`product-${product.id}`}
+                        product={product}
+                        columnVisibility={columnVisibility}
+                        level={0}
+                        onProductMoved={() => handleProductMoved(group.id)}
+                        onDragStart={handleDragStart}
+                        onDragEnd={handleDragEnd}
+                        isDragActive={isDragActive}
+                        selectionMode={selectionMode}
+                        isSelected={selectedProducts.has(product.id)}
+                        onSelect={handleProductSelect}
+                      />
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell 
+                        colSpan={Object.values(columnVisibility).filter(Boolean).length + (selectionMode ? 1 : 0)}
+                        className="text-center py-4 text-muted-foreground text-sm"
+                      >
+                        В этой группе пока нет товаров
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </Fragment>
+            ))}
+          </TableBody>
+        </Table>
+        </div>
+      )}
+
+      {/* Модальное окно создания группы */}
+      <CreateGroupModal
+        open={createModalOpen}
+        onOpenChange={setCreateModalOpen}
+        onGroupCreated={handleGroupCreated}
+      />
+
+      {/* Модальное окно перемещения товаров */}
+      <MoveProductsModal
+        isOpen={moveModalOpen}
+        onClose={() => setMoveModalOpen(false)}
+        selectedProducts={getSelectedProducts()}
+        groups={groups}
+        onProductsMoved={handleProductsMoved}
+      />
+    </div>
+  );
+}

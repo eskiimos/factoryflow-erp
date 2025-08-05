@@ -1,0 +1,494 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { Plus, Search, Calculator, Clock, Trash2, Edit2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { useToast } from '@/components/ui/use-toast'
+
+export interface WorkType {
+  id: string
+  name: string
+  description?: string
+  unit: string
+  hourlyRate: number
+  departmentId?: string
+  isActive: boolean
+  department?: {
+    id: string
+    name: string
+  }
+}
+
+export interface WorkTypeUsage {
+  workTypeId: string
+  quantity: number
+  cost: number
+  unitType: string
+  baseTime?: number
+  calculationFormula?: string
+  sequence?: number
+  workType?: WorkType
+}
+
+interface ProductWorkSectionProps {
+  workTypeUsages: WorkTypeUsage[]
+  onWorkTypeUsagesChange: (usages: WorkTypeUsage[]) => void
+  pricingMethod: 'FIXED' | 'CALCULATED' | 'RESOURCE_BASED'
+}
+
+export function ProductWorkSection({ 
+  workTypeUsages, 
+  onWorkTypeUsagesChange, 
+  pricingMethod 
+}: ProductWorkSectionProps) {
+  const { toast } = useToast()
+  
+  const [workTypes, setWorkTypes] = useState<WorkType[]>([])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [showAddDialog, setShowAddDialog] = useState(false)
+  const [newWorkType, setNewWorkType] = useState({
+    name: '',
+    description: '',
+    unit: 'час',
+    hourlyRate: 0,
+    departmentId: ''
+  })
+
+  // Загрузка типов работ
+  useEffect(() => {
+    fetchWorkTypes()
+  }, [])
+
+  const fetchWorkTypes = async () => {
+    try {
+      const response = await fetch('/api/work-types')
+      if (!response.ok) throw new Error('Failed to fetch work types')
+      
+      const data = await response.json()
+      if (data.success) {
+        setWorkTypes(data.data || [])
+      }
+    } catch (error) {
+      console.error('Ошибка загрузки типов работ:', error)
+      toast({
+        variant: 'error',
+        title: 'Ошибка',
+        description: 'Не удалось загрузить типы работ'
+      })
+    }
+  }
+
+  // Создание нового типа работы
+  const handleCreateWorkType = async () => {
+    if (!newWorkType.name.trim() || newWorkType.hourlyRate <= 0) {
+      toast({
+        variant: 'error',
+        title: 'Ошибка',
+        description: 'Заполните все обязательные поля'
+      })
+      return
+    }
+
+    setLoading(true)
+    try {
+      const response = await fetch('/api/work-types', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...newWorkType,
+          isActive: true
+        })
+      })
+
+      if (!response.ok) throw new Error('Failed to create work type')
+      
+      const result = await response.json()
+      if (result.success) {
+        await fetchWorkTypes() // Обновляем список
+        setNewWorkType({ name: '', description: '', unit: 'час', hourlyRate: 0, departmentId: '' })
+        setShowAddDialog(false)
+        toast({
+          variant: 'success',
+          title: 'Успешно!',
+          description: 'Тип работы создан'
+        })
+      }
+    } catch (error) {
+      console.error('Ошибка создания типа работы:', error)
+      toast({
+        variant: 'error',
+        title: 'Ошибка',
+        description: 'Не удалось создать тип работы'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Добавление работы к товару
+  const handleAddWork = (workType: WorkType, estimatedTime: number) => {
+    const existingIndex = workTypeUsages.findIndex(usage => usage.workTypeId === workType.id)
+    
+    if (existingIndex >= 0) {
+      // Обновляем существующую запись
+      const updated = [...workTypeUsages]
+      updated[existingIndex] = {
+        ...updated[existingIndex],
+        quantity: estimatedTime,
+        cost: workType.hourlyRate * estimatedTime
+      }
+      onWorkTypeUsagesChange(updated)
+    } else {
+      // Добавляем новую запись
+      const newUsage: WorkTypeUsage = {
+        workTypeId: workType.id,
+        quantity: estimatedTime,
+        cost: workType.hourlyRate * estimatedTime,
+        unitType: workType.unit,
+        baseTime: estimatedTime,
+        sequence: workTypeUsages.length + 1,
+        workType
+      }
+      onWorkTypeUsagesChange([...workTypeUsages, newUsage])
+    }
+
+    toast({
+      variant: 'success',
+      title: 'Работа добавлена',
+      description: `${workType.name} (${estimatedTime} ${workType.unit})`
+    })
+  }
+
+  // Удаление работы
+  const handleRemoveWork = (workTypeId: string) => {
+    onWorkTypeUsagesChange(workTypeUsages.filter(usage => usage.workTypeId !== workTypeId))
+    toast({
+      variant: 'info',
+      title: 'Работа удалена',
+      description: 'Работа была удалена из списка'
+    })
+  }
+
+  // Обновление времени работы
+  const handleUpdateTime = (workTypeId: string, newTime: number) => {
+    const updated = workTypeUsages.map(usage => {
+      if (usage.workTypeId === workTypeId) {
+        const hourlyRate = usage.workType?.hourlyRate || 0
+        return {
+          ...usage,
+          quantity: newTime,
+          cost: hourlyRate * newTime
+        }
+      }
+      return usage
+    })
+    onWorkTypeUsagesChange(updated)
+  }
+
+  // Фильтрация типов работ
+  const filteredWorkTypes = workTypes.filter(workType =>
+    workType.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    workType.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    workType.department?.name.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+
+  // Расчеты
+  const totalLaborCost = workTypeUsages.reduce((sum, usage) => sum + usage.cost, 0)
+  const totalTime = workTypeUsages.reduce((sum, usage) => sum + usage.quantity, 0)
+
+  return (
+    <div className="space-y-6">
+      {/* Заголовок секции */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold">Работы и трудозатраты</h3>
+          <p className="text-sm text-muted-foreground">
+            Управление работами, временем выполнения и расчетом стоимости труда
+          </p>
+        </div>
+        <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm">
+              <Plus className="w-4 h-4 mr-2" />
+              Новый тип работы
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Создать тип работы</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="work-name">Название работы *</Label>
+                <Input
+                  id="work-name"
+                  value={newWorkType.name}
+                  onChange={(e) => setNewWorkType({...newWorkType, name: e.target.value})}
+                  placeholder="Например: Сварка, Покраска, Сборка"
+                />
+              </div>
+              <div>
+                <Label htmlFor="work-description">Описание</Label>
+                <Input
+                  id="work-description"
+                  value={newWorkType.description}
+                  onChange={(e) => setNewWorkType({...newWorkType, description: e.target.value})}
+                  placeholder="Краткое описание работы"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="work-unit">Единица измерения</Label>
+                  <Select value={newWorkType.unit} onValueChange={(value) => setNewWorkType({...newWorkType, unit: value})}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="час">час</SelectItem>
+                      <SelectItem value="мин">минута</SelectItem>
+                      <SelectItem value="день">день</SelectItem>
+                      <SelectItem value="шт">штука</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="work-rate">Тариф за единицу *</Label>
+                  <Input
+                    id="work-rate"
+                    type="number"
+                    value={newWorkType.hourlyRate}
+                    onChange={(e) => setNewWorkType({...newWorkType, hourlyRate: parseFloat(e.target.value) || 0})}
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+                  Отмена
+                </Button>
+                <Button onClick={handleCreateWorkType} disabled={loading}>
+                  {loading ? 'Создание...' : 'Создать'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Двухколоночный макет */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Левая колонка - Доступные типы работ */}
+        <Card className="h-fit">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calculator className="w-5 h-5" />
+              Доступные типы работ
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {/* Поиск */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                <Input
+                  placeholder="Поиск работ по названию, описанию или отделу..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 border-gray-100"
+                />
+              </div>
+
+              {/* Список типов работ */}
+              <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                {filteredWorkTypes.map(workType => {
+                  const isAdded = workTypeUsages.some(usage => usage.workTypeId === workType.id)
+                  
+                  return (
+                    <div key={workType.id} className="p-3 border-2 border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 bg-white">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-medium text-sm text-gray-900 truncate">{workType.name}</h4>
+                            {workType.department && (
+                              <Badge variant="outline" className="text-xs shrink-0">
+                                {workType.department.name}
+                              </Badge>
+                            )}
+                            {isAdded && (
+                              <Badge variant="secondary" className="text-xs shrink-0">
+                                ✓
+                              </Badge>
+                            )}
+                          </div>
+                          {workType.description && (
+                            <p className="text-xs text-gray-600 mb-2 line-clamp-1">{workType.description}</p>
+                          )}
+                          <div className="text-xs font-medium text-blue-600">
+                            {workType.hourlyRate} ₽/{workType.unit}
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2 ml-3 shrink-0">
+                          <Input
+                            type="number"
+                            placeholder="Время"
+                            className="w-16 h-7 text-xs border-gray-200 focus:border-blue-500"
+                            min="0"
+                            step="0.1"
+                            defaultValue="1"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                const time = parseFloat(e.currentTarget.value)
+                                if (time > 0) {
+                                  handleAddWork(workType, time)
+                                  e.currentTarget.value = '1'
+                                }
+                              }
+                            }}
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 w-7 p-0 border-blue-200 hover:bg-blue-50 hover:border-blue-300"
+                            onClick={() => {
+                              const inputs = document.querySelectorAll(`input[placeholder="Время"]`)
+                              const currentInput = Array.from(inputs).find(input => 
+                                input.closest('.p-3')?.querySelector('h4')?.textContent === workType.name
+                              ) as HTMLInputElement
+                              const time = parseFloat(currentInput?.value || '1')
+                              if (time > 0) {
+                                handleAddWork(workType, time)
+                                if (currentInput) currentInput.value = '1'
+                              }
+                            }}
+                            disabled={isAdded}
+                          >
+                            <Plus className="w-3 h-3 text-blue-600" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {filteredWorkTypes.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Calculator className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>Типы работ не найдены</p>
+                  <p className="text-sm">Попробуйте изменить поисковый запрос или создать новый тип работы</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Правая колонка - Выбранные работы */}
+        <Card className="h-fit">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="w-5 h-5" />
+              Выбранные работы
+              <Badge variant="secondary" className="ml-auto">
+                {workTypeUsages.length} работ
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {workTypeUsages.length > 0 ? (
+              <div className="space-y-4">
+                <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                  {workTypeUsages.map((usage, index) => (
+                    <div key={`${usage.workTypeId}-${index}`} className="p-3 border rounded-lg">
+                                      <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                  {workTypeUsages.map((usage, index) => (
+                    <div key={`${usage.workTypeId}-${index}`} className="p-4 border-2 border-gray-200 rounded-lg bg-white shadow-sm">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h4 className="font-medium text-sm text-gray-900">{usage.workType?.name}</h4>
+                            {usage.workType?.department && (
+                              <Badge variant="outline" className="text-xs">
+                                {usage.workType.department.name}
+                              </Badge>
+                            )}
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <Label className="text-xs text-gray-600 font-medium">Время</Label>
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  type="number"
+                                  value={usage.quantity}
+                                  onChange={(e) => handleUpdateTime(usage.workTypeId, parseFloat(e.target.value) || 0)}
+                                  className="w-20 h-7 text-xs border-gray-200 focus:border-blue-500"
+                                  min="0"
+                                  step="0.1"
+                                />
+                                <span className="text-xs text-gray-500 shrink-0">
+                                  {usage.workType?.unit}
+                                </span>
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <Label className="text-xs text-gray-600 font-medium">Стоимость</Label>
+                              <div className="h-7 px-3 py-1 border border-gray-100 rounded-md bg-blue-50 text-sm font-medium text-blue-700">
+                                {usage.cost.toLocaleString('ru-RU')} ₽
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="text-xs text-gray-500 mt-2">
+                            {usage.workType?.hourlyRate} ₽/{usage.workType?.unit}
+                          </div>
+                        </div>
+                        
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveWork(usage.workTypeId)}
+                          className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 ml-3 shrink-0"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Итоги */}
+                <div className="pt-4 border-t bg-blue-50 rounded-lg p-3">
+                  <div className="grid grid-cols-1 gap-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Общее время:</span>
+                      <span className="font-semibold text-blue-700">{totalTime.toFixed(1)} ч</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Стоимость труда:</span>
+                      <span className="font-bold text-lg text-blue-700">{totalLaborCost.toLocaleString('ru-RU')} ₽</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-muted-foreground">
+                <Clock className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p className="font-medium">Работы не выбраны</p>
+                <p className="text-sm">Добавьте работы из левой колонки, указав время выполнения</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
