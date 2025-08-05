@@ -33,7 +33,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLanguage } from "@/context/language-context"
 import { TableColumnSettings } from "@/components/table-column-settings"
-import { WorkTypesTablePresets } from "@/components/work-types-table-presets"
+import { TablePresets } from "@/components/table-presets"
 import { useWorkTypesTableColumns } from "@/hooks/use-work-types-table-columns"
 
 export interface WorkTypesTableProps {
@@ -437,7 +437,7 @@ export const WorkTypesTable = forwardRef<WorkTypesTableRef, WorkTypesTableProps>
             </Badge>
           </div>
           <div className="flex items-center gap-2">
-            <WorkTypesTablePresets
+            <TablePresets
               columns={columns}
               onApplyPreset={handleApplyPreset}
               className="mr-2"
@@ -475,7 +475,7 @@ export const WorkTypesTable = forwardRef<WorkTypesTableRef, WorkTypesTableProps>
         </div>
         
         {/* Department Tabs */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-start gap-4">
           <Tabs 
             defaultValue="all" 
             value={selectedDepartmentId || "all"}
@@ -484,36 +484,68 @@ export const WorkTypesTable = forwardRef<WorkTypesTableRef, WorkTypesTableProps>
               setPage(1)
               setLoading(true) // Показываем загрузку при смене вкладки
             }}
-            className="flex-1"
+            className="flex-1 min-w-0"
           >
-            <div className="overflow-x-auto pb-1">
-              <TabsList className="w-auto mb-2 inline-flex flex-nowrap bg-gray-50">
-                <TabsTrigger value="all" className="flex-shrink-0 flex items-center">
-                  <Building2 className="h-4 w-4 mr-2" />
-                  Все отделы
-                  <Badge variant="secondary" className="ml-2 text-xs bg-white">
-                    {totalWorkTypesCount}
-                  </Badge>
-                </TabsTrigger>
-                {departments.map((dept) => (
-                  <TabsTrigger 
-                    key={dept.id} 
-                    value={dept.id} 
-                    className="flex-shrink-0 flex items-center"
-                  >
-                    {dept.name}
-                    <Badge variant="secondary" className="ml-2 text-xs bg-white">
-                      {departmentCounts[dept.id] || 0}
-                    </Badge>
+            <div className="relative overflow-hidden">
+              <div 
+                className="overflow-x-auto pb-1 scrollbar-none"
+                onScroll={(e) => {
+                  const target = e.target as HTMLElement;
+                  const leftIndicator = target.parentElement?.querySelector('.scroll-indicator-left') as HTMLElement;
+                  const rightIndicator = target.parentElement?.querySelector('.scroll-indicator-right') as HTMLElement;
+                  
+                  if (leftIndicator && rightIndicator) {
+                    const isAtStart = target.scrollLeft === 0;
+                    const isAtEnd = target.scrollLeft >= target.scrollWidth - target.clientWidth - 1;
+                    
+                    leftIndicator.style.opacity = isAtStart ? '0' : '1';
+                    rightIndicator.style.opacity = isAtEnd ? '0' : '1';
+                  }
+                }}
+                ref={(el) => {
+                  if (el) {
+                    // Проверяем нужны ли индикаторы при загрузке
+                    setTimeout(() => {
+                      const leftIndicator = el.parentElement?.querySelector('.scroll-indicator-left') as HTMLElement;
+                      const rightIndicator = el.parentElement?.querySelector('.scroll-indicator-right') as HTMLElement;
+                      
+                      if (leftIndicator && rightIndicator) {
+                        const hasOverflow = el.scrollWidth > el.clientWidth;
+                        const isAtStart = el.scrollLeft === 0;
+                        const isAtEnd = el.scrollLeft >= el.scrollWidth - el.clientWidth - 1;
+                        
+                        leftIndicator.style.opacity = hasOverflow && !isAtStart ? '1' : '0';
+                        rightIndicator.style.opacity = hasOverflow && !isAtEnd ? '1' : '0';
+                      }
+                    }, 100);
+                  }
+                }}
+              >
+                <TabsList className="w-auto mb-2 inline-flex flex-nowrap min-w-max">
+                  <TabsTrigger value="all" className="flex-shrink-0 whitespace-nowrap">
+                    Все отделы
                   </TabsTrigger>
-                ))}
-              </TabsList>
+                  {departments.map((dept) => (
+                    <TabsTrigger 
+                      key={dept.id} 
+                      value={dept.id} 
+                      className="flex-shrink-0 whitespace-nowrap"
+                    >
+                      {dept.name}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
+              {/* Динамические индикаторы прокрутки */}
+              <div className="scroll-indicator-left absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-white via-white/90 to-transparent pointer-events-none opacity-0 transition-opacity duration-200" />
+              <div className="scroll-indicator-right absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-white via-white/90 to-transparent pointer-events-none opacity-0 transition-opacity duration-200" />
             </div>
           </Tabs>
           {onManageDepartments && (
             <Button 
               variant="outline" 
               size="sm"
+              className="flex-shrink-0 ml-2"
               onClick={onManageDepartments}
             >
               <Settings className="h-4 w-4 mr-2" />

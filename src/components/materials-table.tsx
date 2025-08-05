@@ -113,10 +113,17 @@ export const MaterialsTable = forwardRef<MaterialsTableRef, MaterialsTableProps>
   const fetchCategories = async () => {
     try {
       const response = await fetch("/api/categories")
-      const { data } = await response.json()
-      setCategories(data)
+      const result = await response.json()
+      // Проверяем, что данные существуют и это массив
+      if (result.data && Array.isArray(result.data)) {
+        setCategories(result.data)
+      } else {
+        console.warn("Categories data is not an array:", result)
+        setCategories([]) // Устанавливаем пустой массив как fallback
+      }
     } catch (error) {
       console.error("Error fetching categories:", error)
+      setCategories([]) // Устанавливаем пустой массив в случае ошибки
     }
   };
 
@@ -351,36 +358,74 @@ export const MaterialsTable = forwardRef<MaterialsTableRef, MaterialsTableProps>
         </div>
         
         {/* Group Tabs */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-start gap-4">
           <Tabs 
             defaultValue="all" 
             value={selectedCategoryId || "all"}
             onValueChange={(value: string) => setSelectedCategoryId(value === "all" ? null : value)}
-            className="flex-1"
+            className="flex-1 min-w-0"
           >
-            <div className="overflow-x-auto pb-1">
-              <TabsList className="w-auto mb-2 inline-flex flex-nowrap">
-                <TabsTrigger value="all" className="flex-shrink-0">
-                  Все группы
-                </TabsTrigger>
-                {categories.map((category) => (
-                  <TabsTrigger 
-                    key={category.id} 
-                    value={category.id} 
-                    className="flex-shrink-0"
-                  >
-                    {category.name}
+            <div className="relative overflow-hidden">
+              <div 
+                className="overflow-x-auto pb-2 scrollbar-none"
+                onScroll={(e) => {
+                  const target = e.target as HTMLElement;
+                  const leftIndicator = target.parentElement?.querySelector('.scroll-indicator-left') as HTMLElement;
+                  const rightIndicator = target.parentElement?.querySelector('.scroll-indicator-right') as HTMLElement;
+                  
+                  if (leftIndicator && rightIndicator) {
+                    const isAtStart = target.scrollLeft === 0;
+                    const isAtEnd = target.scrollLeft >= target.scrollWidth - target.clientWidth - 1;
+                    
+                    leftIndicator.style.opacity = isAtStart ? '0' : '1';
+                    rightIndicator.style.opacity = isAtEnd ? '0' : '1';
+                  }
+                }}
+                ref={(el) => {
+                  if (el) {
+                    // Проверяем нужны ли индикаторы при загрузке
+                    setTimeout(() => {
+                      const leftIndicator = el.parentElement?.querySelector('.scroll-indicator-left') as HTMLElement;
+                      const rightIndicator = el.parentElement?.querySelector('.scroll-indicator-right') as HTMLElement;
+                      
+                      if (leftIndicator && rightIndicator) {
+                        const hasOverflow = el.scrollWidth > el.clientWidth;
+                        const isAtStart = el.scrollLeft === 0;
+                        const isAtEnd = el.scrollLeft >= el.scrollWidth - el.clientWidth - 1;
+                        
+                        leftIndicator.style.opacity = hasOverflow && !isAtStart ? '1' : '0';
+                        rightIndicator.style.opacity = hasOverflow && !isAtEnd ? '1' : '0';
+                      }
+                    }, 100);
+                  }
+                }}
+              >
+                <TabsList className="w-auto mb-2 inline-flex flex-nowrap min-w-max">
+                  <TabsTrigger value="all" className="flex-shrink-0 whitespace-nowrap">
+                    Все группы
                   </TabsTrigger>
-                ))}
-              </TabsList>
+                  {categories && Array.isArray(categories) && categories.map((category) => (
+                    <TabsTrigger 
+                      key={category.id} 
+                      value={category.id} 
+                      className="flex-shrink-0 whitespace-nowrap"
+                    >
+                      {category.name}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
+              {/* Динамические индикаторы прокрутки */}
+              <div className="scroll-indicator-left absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-white via-white/90 to-transparent pointer-events-none opacity-0 transition-opacity duration-200" />
+              <div className="scroll-indicator-right absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-white via-white/90 to-transparent pointer-events-none opacity-0 transition-opacity duration-200" />
             </div>
           </Tabs>
           {onManageCategories && (
             <Button 
               variant="outline" 
-              size="sm" 
+              size="sm"
+              className="flex-shrink-0 ml-2"
               onClick={onManageCategories}
-              className="ml-2"
             >
               <Settings className="h-3.5 w-3.5 mr-1" />
               Управление группами

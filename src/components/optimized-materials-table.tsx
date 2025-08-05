@@ -458,8 +458,8 @@ export function OptimizedMaterialsTable({
   // Заглушка для пустых результатов
   if (materials.length === 0) {
     return (
-      <div className="rounded-md border">
-        <Table>
+      <div className="rounded-md border overflow-x-auto table-scroll">
+        <Table style={{ minWidth: '1200px' }}>
           <TableHeader>
             <TableRow style={{ display: 'flex' }}>
               {onSelectionChange && (
@@ -546,8 +546,8 @@ export function OptimizedMaterialsTable({
   }
 
   return (
-    <div className="rounded-md border" ref={tableRef}>
-      <Table>
+    <div className="rounded-md border overflow-x-auto table-scroll" ref={tableRef}>
+      <Table style={{ minWidth: '1200px' }}>
         <TableHeader>
           <TableRow style={{ display: 'flex' }}>
             {onSelectionChange && (

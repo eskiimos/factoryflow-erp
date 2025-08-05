@@ -15,8 +15,16 @@ export async function GET() {
       include: {
         _count: {
           select: {
-            workTypes: true,
-            employees: true
+            workTypes: {
+              where: {
+                isActive: true
+              }
+            },
+            employees: {
+              where: {
+                isActive: true
+              }
+            }
           }
         }
       },

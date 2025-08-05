@@ -1,0 +1,305 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ProductType {
+  STANDARD    // Стандартный товар (с расчетом за единицу)
+  ASSEMBLY    // Сборный товар (состоит из других товаров)
+  WAREHOUSE   // Товар со склада (фиксированная стоимость)
+}
+
+model Category {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  description String?
+  isActive    Boolean @default(true)
+  
+  // Связи
+  materials MaterialItem[]
+  products  Product[]
+  funds     Fund[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Department {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  description String?
+  isActive    Boolean @default(true)
+  
+  // Связи
+  workTypes WorkType[]
+  employees Employee[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MaterialItem {
+  id          String   @id @default(cuid())
+  name        String
+  unit        String
+  price       Float
+  currency    String   @default("RUB")
+  isActive    Boolean  @default(true)
+  categoryId  String?
+  
+  // Связи
+  category    Category? @relation(fields: [categoryId], references: [id])
+  productMaterials MaterialUsage[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([categoryId])
+}
+
+model WorkType {
+  id           String  @id @default(cuid())
+  name         String
+  description  String?
+  hourlyRate   Float
+  departmentId String?
+  isActive     Boolean @default(true)
+  
+  // Связи
+  department   Department? @relation(fields: [departmentId], references: [id])
+  productWorkTypes WorkTypeUsage[]
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@index([departmentId])
+}
+
+model Fund {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  totalAmount Float
+  categoryId  String?
+  isActive    Boolean @default(true)
+  
+  // Связи
+  category    Category? @relation(fields: [categoryId], references: [id])
+  productFunds ProductFundUsage[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([categoryId])
+}
+
+model Employee {
+  id           String  @id @default(cuid())
+  name         String
+  email        String? @unique
+  position     String?
+  departmentId String?
+  isActive     Boolean @default(true)
+  
+  // Связи
+  department   Department? @relation(fields: [departmentId], references: [id])
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@index([departmentId])
+}
+
+model Product {
+  id               String      @id @default(cuid())
+  name             String
+  description      String?
+  unit             String      @default("шт")
+  sellingPrice     Float       @default(0)
+  categoryId       String?
+  isActive         Boolean     @default(true)
+  productType      ProductType @default(STANDARD)
+  
+  // Поля для стандартного продукта (calculator fields)
+  width            Float?
+  height           Float?
+  length           Float?
+  
+  // Поля для складского товара
+  purchasePrice    Float?
+  
+  // Инвентарные поля
+  currentStock     Float       @default(0)
+  minStock         Float       @default(0)
+  maxStock         Float       @default(100)
+  
+  // Связи
+  category         Category? @relation(fields: [categoryId], references: [id])
+  materials        MaterialUsage[]
+  workTypes        WorkTypeUsage[]
+  funds            ProductFundUsage[]
+  
+  // Сборные товары
+  parentAssemblies AssemblyItem[] @relation("ParentProduct")
+  childComponents  AssemblyItem[] @relation("ChildProduct")
+  
+  // Calculator configurations
+  calculatorConfigurations CalculatorConfiguration[]
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@index([categoryId])
+}
+
+model MaterialUsage {
+  id         String @id @default(cuid())
+  productId  String
+  materialId String
+  quantity   Float
+  
+  // Связи
+  product    Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  material   MaterialItem @relation(fields: [materialId], references: [id])
+  
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  @@unique([productId, materialId])
+  @@index([productId])
+  @@index([materialId])
+}
+
+model WorkTypeUsage {
+  id            String @id @default(cuid())
+  productId     String
+  workTypeId    String
+  estimatedTime Float
+  
+  // Связи
+  product       Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  workType      WorkType @relation(fields: [workTypeId], references: [id])
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@unique([productId, workTypeId])
+  @@index([productId])
+  @@index([workTypeId])
+}
+
+model ProductFundUsage {
+  id                  String @id @default(cuid())
+  productId           String
+  fundId              String
+  allocationPercentage Float
+  
+  // Связи
+  product             Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  fund                Fund @relation(fields: [fundId], references: [id])
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  @@unique([productId, fundId])
+  @@index([productId])
+  @@index([fundId])
+}
+
+model AssemblyItem {
+  id               String @id @default(cuid())
+  parentProductId  String
+  childProductId   String
+  quantity         Float
+  
+  // Связи
+  parentProduct    Product @relation("ParentProduct", fields: [parentProductId], references: [id], onDelete: Cascade)
+  childProduct     Product @relation("ChildProduct", fields: [childProductId], references: [id])
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@unique([parentProductId, childProductId])
+  @@index([parentProductId])
+  @@index([childProductId])
+}
+
+// Calculator models
+model CalculatorConfiguration {
+  id          String @id @default(cuid())
+  name        String
+  description String?
+  productId   String
+  
+  // Configuration data
+  materials   CalculatorMaterial[]
+  workTypes   CalculatorWorkType[]
+  funds       CalculatorFund[]
+  
+  // Связи
+  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([productId])
+}
+
+model CalculatorMaterial {
+  id            String @id @default(cuid())
+  configId      String
+  materialId    String
+  quantity      Float
+  
+  // Связи
+  configuration CalculatorConfiguration @relation(fields: [configId], references: [id], onDelete: Cascade)
+  material      MaterialItem @relation(fields: [materialId], references: [id])
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@unique([configId, materialId])
+  @@index([configId])
+  @@index([materialId])
+}
+
+model CalculatorWorkType {
+  id            String @id @default(cuid())
+  configId      String
+  workTypeId    String
+  estimatedTime Float
+  
+  // Связи
+  configuration CalculatorConfiguration @relation(fields: [configId], references: [id], onDelete: Cascade)
+  workType      WorkType @relation(fields: [workTypeId], references: [id])
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@unique([configId, workTypeId])
+  @@index([configId])
+  @@index([workTypeId])
+}
+
+model CalculatorFund {
+  id                   String @id @default(cuid())
+  configId             String
+  fundId               String
+  allocationPercentage Float
+  
+  // Связи
+  configuration        CalculatorConfiguration @relation(fields: [configId], references: [id], onDelete: Cascade)
+  fund                 Fund @relation(fields: [fundId], references: [id])
+  
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  
+  @@unique([configId, fundId])
+  @@index([configId])
+  @@index([fundId])
+}

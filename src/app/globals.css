@@ -745,3 +745,77 @@ kbd:hover {
     @apply bg-background text-foreground;
   }
 }
+
+/* Улучшенные стили для горизонтальной прокрутки */
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+.scrollbar-none {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* Internet Explorer 10+ */
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none; /* WebKit */
+}
+
+.scrollbar-thumb-gray-300::-webkit-scrollbar-thumb {
+  background-color: #d1d5db;
+  border-radius: 4px;
+}
+
+.scrollbar-track-gray-100::-webkit-scrollbar-track {
+  background-color: #f3f4f6;
+  border-radius: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+/* Стили для табов категорий */
+.scrollbar-thin.scrollbar-thumb-gray-300.scrollbar-track-gray-100::-webkit-scrollbar {
+  height: 6px;
+}
+
+.scrollbar-thin.scrollbar-thumb-gray-300.scrollbar-track-gray-100::-webkit-scrollbar-track {
+  background: #f3f4f6;
+  border-radius: 4px;
+  margin: 0 8px;
+}
+
+.scrollbar-thin.scrollbar-thumb-gray-300.scrollbar-track-gray-100::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+
+.scrollbar-thin.scrollbar-thumb-gray-300.scrollbar-track-gray-100::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Плавная прокрутка для таблиц */
+.table-scroll {
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db #f3f4f6;
+}
+
+.table-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.table-scroll::-webkit-scrollbar-track {
+  background: #f3f4f6;
+  border-radius: 4px;
+}
+
+.table-scroll::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+
+.table-scroll::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}

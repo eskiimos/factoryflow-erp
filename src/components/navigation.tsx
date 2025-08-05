@@ -30,17 +30,19 @@ export function Navigation() {
     { name: t.nav.materials, href: "/materials", icon: Package },
     { name: t.nav.workTypes, href: "/work-types", icon: Wrench },
     { name: "Товары", href: "/products", icon: ShoppingCart },
-    { name: "Расчеты", href: "/calculations", icon: Calculator },
-    { name: "Заказы", href: "/orders", icon: ClipboardList },
+    { name: "Расчеты (в разработке)", href: "/calculations", icon: Calculator },
+    // Временно скрыты до завершения разработки
+    // { name: "Заказы", href: "/orders", icon: ClipboardList },
     // Калькулятор временно скрыт
     // { name: "Калькулятор заказов", href: "/calculator", icon: Calculator },
-    { name: "📊 Калькуляторы", href: "/formulas-test", icon: Calculator },
+    { name: "Калькуляторы (в разработке)", href: "/formulas-test", icon: Calculator },
     { name: "Фонды", href: "/planning", icon: Target },
     { name: "Сотрудники", href: "/employees", icon: Users },
-    { name: "Финансы", href: "/finance", icon: DollarSign },
-    { name: t.nav.analytics, href: "/analytics", icon: BarChart3 },
-    { name: t.nav.reports, href: "/reports", icon: FileText },
-    { name: t.nav.users, href: "/users", icon: Users },
+    // Временно скрыты до завершения разработки
+    // { name: "Финансы", href: "/finance", icon: DollarSign },
+    // { name: t.nav.analytics, href: "/analytics", icon: BarChart3 },
+    // { name: t.nav.reports, href: "/reports", icon: FileText },
+    // { name: t.nav.users, href: "/users", icon: Users },
     { name: t.nav.settings, href: "/settings", icon: Settings },
   ]
 

@@ -13,12 +13,28 @@ export async function GET(
     const department = await prisma.department.findUnique({
       where: { id: id },
       include: {
-        workTypes: true,
-        employees: true,
+        workTypes: {
+          where: {
+            isActive: true
+          }
+        },
+        employees: {
+          where: {
+            isActive: true
+          }
+        },
         _count: {
           select: {
-            workTypes: true,
-            employees: true
+            workTypes: {
+              where: {
+                isActive: true
+              }
+            },
+            employees: {
+              where: {
+                isActive: true
+              }
+            }
           }
         }
       }
@@ -118,14 +134,24 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
+    
     // Проверка существования
     const existingDepartment = await prisma.department.findUnique({
       where: { id: id },
       include: {
         _count: {
           select: {
-            workTypes: true,
-            employees: true
+            workTypes: {
+              where: {
+                isActive: true
+              }
+            },
+            employees: {
+              where: {
+                isActive: true
+              }
+            }
           }
         }
       }
