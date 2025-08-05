@@ -43,6 +43,13 @@ export function ProductTypeSelector({ entryPoint, onSelect }: ProductTypeSelecto
       icon: <Archive className="h-6 w-6" />,
       complexity: 'simple',
     },
+    {
+      id: 'CONSTRUCTOR',
+      title: 'Конструктор товаров',
+      description: 'Создание сложных товаров из модулей с помощью конструктора.',
+      icon: <Layers className="h-6 w-6 text-blue-600" />,
+      complexity: 'complex',
+    },
   ];
 
   const getEntryPointName = (entry: EntryPoint): string => {

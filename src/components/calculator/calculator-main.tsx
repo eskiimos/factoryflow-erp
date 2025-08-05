@@ -23,6 +23,7 @@ import { ProductTypeSelector } from '@/components/calculator/product-type-select
 import { StandardProductFlow } from '@/components/calculator/standard-product-flow';
 import { CompositeProductFlow } from '@/components/calculator/composite-product-flow';
 import { WarehouseProductFlow } from '@/components/calculator/warehouse-product-flow';
+import { ConstructorProductFlow } from '@/components/calculator/constructor-product-flow';
 import { CalculationResults } from '@/components/calculator/calculation-results';
 
 interface CalculatorMainProps {
@@ -150,6 +151,18 @@ export function CalculatorMain({ sourceId, initialData, entryPoint = 'CATALOG' }
           case 'WAREHOUSE':
             return (
               <WarehouseProductFlow
+                entryPoint={selectedEntryPoint}
+                sourceId={sourceId}
+                initialData={initialData}
+                onComplete={handleCalculationComplete}
+                onBack={handleBack}
+                onMetricsUpdate={(update: Partial<CalculationMetrics>) => setMetrics(prev => ({ ...prev, ...update }))}
+              />
+            );
+            
+          case 'CONSTRUCTOR':
+            return (
+              <ConstructorProductFlow
                 entryPoint={selectedEntryPoint}
                 sourceId={sourceId}
                 initialData={initialData}

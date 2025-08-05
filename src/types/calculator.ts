@@ -9,7 +9,7 @@ export type EntryPoint =
   | 'TEMPLATE' // Шаблон клиента
   | 'BRIEF'; // Импорт из брифа
 
-export type ProductCalculationType = 'STANDARD' | 'COMPOSITE' | 'WAREHOUSE';
+export type ProductCalculationType = 'STANDARD' | 'COMPOSITE' | 'WAREHOUSE' | 'CONSTRUCTOR';
 export type ParameterCategory = 'basic' | 'advanced';
 export type Currency = 'RUB' | 'USD' | 'EUR';
 
